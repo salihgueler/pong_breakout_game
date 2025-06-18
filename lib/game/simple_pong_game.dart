@@ -3,6 +3,8 @@ import 'dart:math';
 import 'package:flame/components.dart';
 import 'package:flame/game.dart';
 import 'package:flame/events.dart';
+import 'package:flame/effects.dart';
+import 'package:flame/particles.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -31,68 +33,128 @@ class SimplePongGame extends FlameGame with HasKeyboardHandlerComponents {
 
   @override
   Future<void> onLoad() async {
-    // Create paddles
+    // Create paddles with neon glow effect
     player1Paddle = RectangleComponent(
       position: Vector2(50, size.y / 2 - 50),
       size: Vector2(20, 100),
-      paint: Paint()..color = Colors.white,
+      paint: Paint()
+        ..color = const Color(0xFF00ff00)
+        ..style = PaintingStyle.fill,
     );
     
     player2Paddle = RectangleComponent(
       position: Vector2(size.x - 70, size.y / 2 - 50),
       size: Vector2(20, 100),
-      paint: Paint()..color = Colors.white,
+      paint: Paint()
+        ..color = const Color(0xFFff6600)
+        ..style = PaintingStyle.fill,
     );
     
-    // Create ball
+    // Create ball with neon effect
     ball = CircleComponent(
       position: Vector2(size.x / 2, size.y / 2),
-      radius: 10,
-      paint: Paint()..color = Colors.white,
+      radius: 12,
+      paint: Paint()
+        ..color = const Color(0xFF00ffff)
+        ..style = PaintingStyle.fill,
     );
     
-    // Create score text
+    // Create score text with arcade styling
     scoreText = TextComponent(
       text: '0 - 0',
-      position: Vector2(size.x / 2, 50),
+      position: Vector2(size.x / 2, 60),
       anchor: Anchor.center,
       textRenderer: TextPaint(
         style: const TextStyle(
-          color: Colors.white,
-          fontSize: 32,
-          fontWeight: FontWeight.bold,
+          color: Color(0xFF00ffff),
+          fontSize: 48,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 8,
+          shadows: [
+            Shadow(
+              color: Color(0xFF00ffff),
+              blurRadius: 10,
+            ),
+            Shadow(
+              color: Color(0xFFff00ff),
+              offset: Offset(2, 2),
+              blurRadius: 5,
+            ),
+          ],
         ),
       ),
     );
     
-    // Create instruction text
+    // Create instruction text with retro styling
     String controls = gameMode == GameMode.singlePlayer 
-        ? 'Player: W/S or ↑/↓ keys'
-        : 'Player 1: W/S | Player 2: I/K';
+        ? 'PLAYER: W/S OR ↑/↓ KEYS'
+        : 'P1: W/S | P2: I/K';
     
     instructionText = TextComponent(
-      text: '$controls | Press R to restart',
-      position: Vector2(size.x / 2, size.y - 30),
+      text: '$controls | PRESS R TO RESTART',
+      position: Vector2(size.x / 2, size.y - 40),
       anchor: Anchor.center,
       textRenderer: TextPaint(
         style: const TextStyle(
-          color: Colors.white70,
-          fontSize: 16,
+          color: Color(0xFF888888),
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 2,
+          shadows: [
+            Shadow(
+              color: Color(0xFF444444),
+              blurRadius: 3,
+            ),
+          ],
         ),
       ),
     );
     
-    // Add components
+    // Add center line
+    final centerLine = _createCenterLine();
+    add(centerLine);
+    
+    // Add components with subtle effects
     add(player1Paddle);
     add(player2Paddle);
     add(ball);
     add(scoreText);
     add(instructionText);
     
+    // Add subtle pulsing effect to ball
+    ball.add(
+      ScaleEffect.to(
+        Vector2.all(1.1),
+        EffectController(
+          duration: 1.0,
+          reverseDuration: 1.0,
+          infinite: true,
+        ),
+      ),
+    );
+    
     // Start the game
     Future.delayed(const Duration(milliseconds: 500), () {
       _launchBall();
     });
+  }
+
+  Component _createCenterLine() {
+    final centerLine = Component();
+    
+    // Create dashed center line
+    for (double y = 0; y < size.y; y += 30) {
+      final dash = RectangleComponent(
+        position: Vector2(size.x / 2 - 2, y),
+        size: Vector2(4, 15),
+        paint: Paint()
+          ..color = const Color(0xFF333333)
+          ..style = PaintingStyle.fill,
+      );
+      centerLine.add(dash);
+    }
+    
+    return centerLine;
   }
 
   @override
@@ -165,8 +227,16 @@ class SimplePongGame extends FlameGame with HasKeyboardHandlerComponents {
 
   void _checkCollisions() {
     // Ball collision with paddles
-    if (_ballCollidesWithPaddle(player1Paddle) || _ballCollidesWithPaddle(player2Paddle)) {
-      ballVelocity.x = -ballVelocity.x;
+    if (_ballCollidesWithPaddle(player1Paddle)) {
+      ballVelocity.x = ballVelocity.x.abs(); // Ensure ball goes right
+      _createCollisionEffect(player1Paddle.position + Vector2(20, 50), const Color(0xFF00ff00));
+      
+      // Add some randomness to the bounce
+      final random = Random();
+      ballVelocity.y += (random.nextDouble() - 0.5) * 100;
+    } else if (_ballCollidesWithPaddle(player2Paddle)) {
+      ballVelocity.x = -ballVelocity.x.abs(); // Ensure ball goes left
+      _createCollisionEffect(player2Paddle.position + Vector2(0, 50), const Color(0xFFff6600));
       
       // Add some randomness to the bounce
       final random = Random();
@@ -174,17 +244,76 @@ class SimplePongGame extends FlameGame with HasKeyboardHandlerComponents {
     }
   }
 
+  void _createCollisionEffect(Vector2 position, Color color) {
+    // Use Flame's built-in particle system
+    final particleComponent = ParticleSystemComponent(
+      particle: Particle.generate(
+        count: 8,
+        lifespan: 0.5,
+        generator: (i) => AcceleratedParticle(
+          acceleration: Vector2(0, 200), // Gravity effect
+          speed: Vector2.random(Random()) * 200,
+          position: position.clone(),
+          child: CircleParticle(
+            radius: 3.0,
+            paint: Paint()..color = color,
+          ),
+        ),
+      ),
+    );
+    add(particleComponent);
+  }
+
   void _checkScoring() {
     // Scoring
     if (ball.position.x < 0) {
       player2Score++;
       scoreText.text = '$player1Score - $player2Score';
+      _createScoreEffect(false); // Player 2 scored
       _resetBall();
     } else if (ball.position.x > size.x) {
       player1Score++;
       scoreText.text = '$player1Score - $player2Score';
+      _createScoreEffect(true); // Player 1 scored
       _resetBall();
     }
+  }
+
+  void _createScoreEffect(bool player1Scored) {
+    // Use Flame's built-in particle system for score explosion
+    final center = Vector2(size.x / 2, size.y / 2);
+    final color = player1Scored ? const Color(0xFF00ff00) : const Color(0xFFff6600);
+    
+    final particleComponent = ParticleSystemComponent(
+      particle: Particle.generate(
+        count: 15,
+        lifespan: 1.0,
+        generator: (i) {
+          final angle = (i / 15) * 2 * pi;
+          return AcceleratedParticle(
+            acceleration: Vector2(0, 50), // Slight gravity
+            speed: Vector2(
+              cos(angle) * (100 + Random().nextDouble() * 100),
+              sin(angle) * (100 + Random().nextDouble() * 100),
+            ),
+            position: center.clone(),
+            child: CircleParticle(
+              radius: 4.0,
+              paint: Paint()..color = color,
+            ),
+          );
+        },
+      ),
+    );
+    add(particleComponent);
+    
+    // Add scale effect to score text
+    scoreText.add(
+      ScaleEffect.to(
+        Vector2.all(1.2),
+        EffectController(duration: 0.2, reverseDuration: 0.2),
+      ),
+    );
   }
 
   bool _ballCollidesWithPaddle(RectangleComponent paddle) {
