@@ -2,12 +2,13 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flame/components.dart';
 import 'package:flame/game.dart';
+import 'package:flame/events.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 enum GameMode { singlePlayer, multiPlayer }
 
-class SimplePongGame extends FlameGame {
+class SimplePongGame extends FlameGame with HasKeyboardHandlerComponents {
   late RectangleComponent player1Paddle;
   late RectangleComponent player2Paddle;
   late CircleComponent ball;
@@ -94,6 +95,32 @@ class SimplePongGame extends FlameGame {
     });
   }
 
+  @override
+  KeyEventResult onKeyEvent(KeyEvent event, Set<LogicalKeyboardKey> keysPressed) {
+    // Call super to maintain proper mixin behavior
+    super.onKeyEvent(event, keysPressed);
+    
+    // Player 1 controls (W/S and Arrow keys)
+    player1Up = keysPressed.contains(LogicalKeyboardKey.keyW) ||
+                keysPressed.contains(LogicalKeyboardKey.arrowUp);
+    player1Down = keysPressed.contains(LogicalKeyboardKey.keyS) ||
+                  keysPressed.contains(LogicalKeyboardKey.arrowDown);
+    
+    // Player 2 controls (I/K) - only in local multiplayer
+    if (gameMode == GameMode.multiPlayer) {
+      player2Up = keysPressed.contains(LogicalKeyboardKey.keyI);
+      player2Down = keysPressed.contains(LogicalKeyboardKey.keyK);
+    }
+    
+    // Restart game - only on key down to prevent multiple triggers
+    if (keysPressed.contains(LogicalKeyboardKey.keyR) && event is KeyDownEvent) {
+      _restartGame();
+    }
+    
+    // Return KeyEventResult.handled to indicate we processed the event
+    return KeyEventResult.handled;
+  }
+
   void _launchBall() {
     // Reset ball to center
     ball.position = Vector2(size.x / 2, size.y / 2);
@@ -120,30 +147,10 @@ class SimplePongGame extends FlameGame {
   void update(double dt) {
     super.update(dt);
     
-    _handleInput();
     _movePaddles(dt);
     _moveBall(dt);
     _checkCollisions();
     _checkScoring();
-  }
-
-  void _handleInput() {
-    // Player 1 controls (W/S and Arrow keys)
-    player1Up = HardwareKeyboard.instance.isLogicalKeyPressed(LogicalKeyboardKey.keyW) ||
-                HardwareKeyboard.instance.isLogicalKeyPressed(LogicalKeyboardKey.arrowUp);
-    player1Down = HardwareKeyboard.instance.isLogicalKeyPressed(LogicalKeyboardKey.keyS) ||
-                  HardwareKeyboard.instance.isLogicalKeyPressed(LogicalKeyboardKey.arrowDown);
-    
-    // Player 2 controls (I/K) - only in local multiplayer
-    if (gameMode == GameMode.multiPlayer) {
-      player2Up = HardwareKeyboard.instance.isLogicalKeyPressed(LogicalKeyboardKey.keyI);
-      player2Down = HardwareKeyboard.instance.isLogicalKeyPressed(LogicalKeyboardKey.keyK);
-    }
-    
-    // Restart game (with simple debouncing)
-    if (HardwareKeyboard.instance.isLogicalKeyPressed(LogicalKeyboardKey.keyR)) {
-      _restartGame();
-    }
   }
 
   void _moveBall(double dt) {
